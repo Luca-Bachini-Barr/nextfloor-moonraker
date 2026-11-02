@@ -15,7 +15,7 @@ A [NextFloor](https://github.com/therealMRBK/NextFloor) plugin (plugin API 1) fo
 
   Tap again to close.
 
-The plugin handles `sensor.<printer>_current_print_state` and finds the printer's other entities on the same Home Assistant device, so no setup is needed.
+The plugin handles `sensor.<printer>_current_print_state` and finds the printer's other entities on the same Home Assistant device, so no setup is needed. The integration creates this sensor for every printer, named after the printer (a printer called "Voron" gets `sensor.voron_current_print_state`). Renaming the printer or the sensor's display name is fine, but if you change the entity ID itself, keep the `_current_print_state` ending, or the plugin won't recognise it.
 
 While the integration reports the printer unavailable (switched off or not connected), the marker and the window say **Off / not connected** and the window hides everything else. The integration notices a printer that was switched off after its next poll, so this can take up to about a minute.
 
