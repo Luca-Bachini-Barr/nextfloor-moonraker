@@ -18,6 +18,8 @@ A [NextFloor](https://github.com/therealMRBK/NextFloor) plugin (plugin API 1) fo
 
 The plugin handles `sensor.<printer>_current_print_state` and finds the printer's other entities on the same Home Assistant device, so no setup is needed.
 
+If the printer is powered by a smart plug, the plugin finds it by its name: a switch called `<printer> … socket`, `plug`, `power` or `outlet`, preferring one with "printer" in the name (e.g. `Q2 Printer Socket`). While that plug is off the printer shows as **Off** straight away, rather than about a minute later when the integration notices. With the printer off or not connected, the window only shows the state.
+
 ## Install
 
 1. HACS → ⋮ → Custom repositories → add this repository as **Dashboard**, then download it.

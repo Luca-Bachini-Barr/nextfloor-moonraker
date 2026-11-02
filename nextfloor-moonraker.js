@@ -7,7 +7,9 @@
 // - The window shows the state, file, a progress bar with layers, time left, elapsed time and finish time,
 //   nozzle/bed/chamber temperatures, the slicer thumbnail, the printer's camera and (optional) Pause/Resume/Cancel.
 // - The other entities are found on the same Home Assistant device by their Moonraker names, so it works for any
-//   printer of that integration without setup. Nothing is stored outside the plan; the buttons press the
+//   printer of that integration without setup. A smart plug that powers the printer is found by its name ("<printer>
+//   … socket / plug / power", one with "printer" in it first): while it is off the printer shows as off straight away,
+//   instead of a minute later when the integration notices. Nothing is stored outside the plan; the buttons press the
 //   integration's own button entities after a confirmation.
 
 const TEXT = {
@@ -18,7 +20,8 @@ const TEXT = {
     complete: "Finished",
     cancelled: "Cancelled",
     error: "Error",
-    offline: "Off / not connected",
+    offline: "Not connected",
+    off: "Off",
     left: "Left",
     elapsed: "Elapsed",
     finish: "Finishes",
@@ -69,8 +72,10 @@ function related(hass, entityId) {
   };
   const cameras = onDevice.filter((id) => id.startsWith("camera."));
   const deviceName = device ? (hass.devices?.[device]?.name_by_user ?? hass.devices?.[device]?.name) : null;
+  const name = deviceName ?? hass.states[entityId]?.attributes.friendly_name?.replace(/ current print state$/i, "") ?? entityId;
   const r = {
-    name: deviceName ?? hass.states[entityId]?.attributes.friendly_name?.replace(/ current print state$/i, "") ?? entityId,
+    name,
+    power: powerSwitch(hass, name),
     printerState: find("sensor", "printer_state"),
     message: find("sensor", "printer_message"),
     filename: find("sensor", "filename"),
@@ -95,6 +100,14 @@ function related(hass, entityId) {
   };
   perHass.set(entityId, r);
   return r;
+}
+
+/** The smart plug that powers the printer: a switch named "<printer> … socket|plug|power", one saying "printer" first. */
+function powerSwitch(hass, name) {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const named = new RegExp(`^${esc}\\b.*\\b(socket|plug|power|outlet)\\b`, "i");
+  const found = Object.keys(hass.states).filter((id) => id.startsWith("switch.") && named.test(String(hass.states[id].attributes.friendly_name ?? "")));
+  return found.find((id) => /printer/i.test(String(hass.states[id].attributes.friendly_name))) ?? (found.length === 1 ? found[0] : null);
 }
 
 const stateOf = (hass, id) => (id ? hass.states[id]?.state : undefined);
@@ -136,8 +149,9 @@ function formatFinish(hass, id) {
   return `${when.toLocaleDateString(lang, { weekday: "short", timeZone: tz })} ${time}`;
 }
 
-/** What the printer is doing: the print state, or "offline" when Moonraker is not connected. */
+/** What the printer is doing: the print state, "off" while its plug is off, "offline" when Moonraker is not connected. */
 function printState(hass, entityId) {
+  if (stateOf(hass, related(hass, entityId).power) === "off") return "off";
   const s = stateOf(hass, entityId);
   return !s || DEAD.has(s) ? "offline" : s;
 }
@@ -176,7 +190,7 @@ const CSS = `
   .mr-box[hidden] { display: none; }
 `;
 
-const DOT = { printing: "#22b8e6", paused: "#f0b429", complete: "#3ecf6e", cancelled: "#9aa5ab", error: "#e5222e", offline: "#4a5a63" };
+const DOT = { printing: "#22b8e6", paused: "#f0b429", complete: "#3ecf6e", cancelled: "#9aa5ab", error: "#e5222e", offline: "#4a5a63", off: "#4a5a63" };
 
 async function cameraCard(hass, cameraId, live) {
   try {
@@ -242,15 +256,9 @@ function printerWindow(hass, entityId, settings) {
   box.hidden = true;
 
   const cam = el("div", "mr-cam", root);
-  cam.hidden = !(settings.camera && r.camera);
+  cam.hidden = true;
   let camEl = null;
-  if (!cam.hidden) {
-    void cameraCard(hass, r.camera, settings.camera_view === "live").then((c) => {
-      camEl = c;
-      if ("hass" in c && lastHass) c.hass = lastHass;
-      cam.append(c);
-    });
-  }
+  let camLoading = false;
 
   const btns = el("div", "mr-btns", root);
   const button = (key, cls) => {
@@ -284,13 +292,16 @@ function printerWindow(hass, entityId, settings) {
     lastHass = h;
     const s = printState(h, entityId);
     const busy = BUSY.has(s);
+    const down = s === "off" || s === "offline";
+    grid.style.display = down ? "none" : "";
+    cam.hidden = down || !(settings.camera && r.camera);
     dot.style.background = DOT[s] ?? "#6b7f8a";
     stateText.textContent = textOf(h, s) ?? s;
 
     const name = stateOf(h, r.filename);
-    file.textContent = name && !DEAD.has(name) ? name.replace(/^.*\//, "") : "";
+    file.textContent = !down && name && !DEAD.has(name) ? name.replace(/^.*\//, "") : "";
     const m = stateOf(h, r.message);
-    msg.textContent = !busy && m && !DEAD.has(m) && s !== "offline" ? m : "";
+    msg.textContent = !busy && !down && m && !DEAD.has(m) ? m : "";
 
     const p = percent(h, r);
     const showBar = busy || s === "complete";
@@ -315,7 +326,7 @@ function printerWindow(hass, entityId, settings) {
     // the slicer's picture of the file; the camera answers with an error while no file is loaded
     if (settings.thumbnail && r.thumbnail) {
       const pic = h.states[r.thumbnail]?.attributes.entity_picture;
-      const key = name && !DEAD.has(name) && typeof pic === "string" ? `${pic}|${name}` : null;
+      const key = !down && name && !DEAD.has(name) && typeof pic === "string" ? `${pic}|${name}` : null;
       if (key !== thumbKey) {
         thumbKey = key;
         thumb.hidden = true;
@@ -336,7 +347,15 @@ function printerWindow(hass, entityId, settings) {
     bResume.hidden = s !== "paused" || !r.resume;
     bCancel.hidden = !r.cancel;
 
-    if (camEl && "hass" in camEl) camEl.hass = h;
+    if (!cam.hidden && !camEl && !camLoading) {
+      camLoading = true;
+      void cameraCard(h, r.camera, settings.camera_view === "live").then((c) => {
+        camEl = c;
+        if ("hass" in c && lastHass) c.hass = lastHass;
+        cam.append(c);
+      });
+    }
+    if (camEl && "hass" in camEl && !cam.hidden) camEl.hass = h;
   };
   update(hass);
   Object.defineProperty(root, "hass", { set: update });
@@ -370,11 +389,12 @@ const printer = {
     } else if (s === "paused") text = `${textOf(hass, "paused")}${p === null ? "" : ` · ${Math.floor(p)}%`}`;
     else if (s === "error") text = textOf(hass, "error");
     else if (s === "complete") text = textOf(hass, "complete");
+    else if (s === "off") text = textOf(hass, "off");
     return { icon: "mdi:printer-3d-nozzle", text, active: BUSY.has(s) };
   },
   watch: ({ hass, entityId }) => {
     const r = related(hass, entityId);
-    return [r.progress, r.left, r.printerState].filter(Boolean);
+    return [r.progress, r.left, r.printerState, r.power].filter(Boolean);
   },
   tap: ({ hass, entityId, settings, showWindow }) => {
     if (openPrinter === entityId && openWindow?.isConnected) {
@@ -392,7 +412,7 @@ const printer = {
 const plugin = {
   id: "moonraker",
   name: "Moonraker",
-  version: "1.0.0",
+  version: "1.1.0",
   apiVersion: 1,
   devices: [printer],
 };
