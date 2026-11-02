@@ -23,7 +23,9 @@ While the integration reports the printer unavailable (switched off or not conne
 ## Install
 
 1. HACS → ⋮ → Custom repositories → add this repository as **Dashboard**, then download it.
-2. NextFloor → **Extensions → Plugins** → add `/hacsfiles/nextfloor-moonraker/nextfloor-moonraker.js`.
+2. NextFloor → **Extensions → Plugins** → add `/hacsfiles/nextfloor-moonraker/nextfloor-moonraker.js?v=1.2.1`.
+   Home Assistant lets browsers cache `/hacsfiles` files for a month, so after each update change the `?v=` to the
+   new version (or the app keeps running the old copy).
 3. In the editor, place `sensor.<printer>_current_print_state` as a device where the printer stands (room → Devices → Place).
    NextFloor only passes taps to plugins for placed devices.
 
