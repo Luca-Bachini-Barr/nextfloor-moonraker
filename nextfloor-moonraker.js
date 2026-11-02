@@ -7,9 +7,8 @@
 // - The window shows the state, file, a progress bar with layers, time left, elapsed time and finish time,
 //   nozzle/bed/chamber temperatures, the slicer thumbnail, the printer's camera and (optional) Pause/Resume/Cancel.
 // - The other entities are found on the same Home Assistant device by their Moonraker names, so it works for any
-//   printer of that integration without setup. A smart plug that powers the printer is found by its name ("<printer>
-//   … socket / plug / power", one with "printer" in it first): while it is off the printer shows as off straight away,
-//   instead of a minute later when the integration notices. Nothing is stored outside the plan; the buttons press the
+//   printer of that integration without setup. While the integration reports the printer unavailable (switched off or
+//   not connected), the window only shows that. Nothing is stored outside the plan; the buttons press the
 //   integration's own button entities after a confirmation.
 
 const TEXT = {
@@ -20,8 +19,7 @@ const TEXT = {
     complete: "Finished",
     cancelled: "Cancelled",
     error: "Error",
-    offline: "Not connected",
-    off: "Off",
+    offline: "Off / not connected",
     left: "Left",
     elapsed: "Elapsed",
     finish: "Finishes",
@@ -75,7 +73,6 @@ function related(hass, entityId) {
   const name = deviceName ?? hass.states[entityId]?.attributes.friendly_name?.replace(/ current print state$/i, "") ?? entityId;
   const r = {
     name,
-    power: powerSwitch(hass, name),
     printerState: find("sensor", "printer_state"),
     message: find("sensor", "printer_message"),
     filename: find("sensor", "filename"),
@@ -100,14 +97,6 @@ function related(hass, entityId) {
   };
   perHass.set(entityId, r);
   return r;
-}
-
-/** The smart plug that powers the printer: a switch named "<printer> … socket|plug|power", one saying "printer" first. */
-function powerSwitch(hass, name) {
-  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const named = new RegExp(`^${esc}\\b.*\\b(socket|plug|power|outlet)\\b`, "i");
-  const found = Object.keys(hass.states).filter((id) => id.startsWith("switch.") && named.test(String(hass.states[id].attributes.friendly_name ?? "")));
-  return found.find((id) => /printer/i.test(String(hass.states[id].attributes.friendly_name))) ?? (found.length === 1 ? found[0] : null);
 }
 
 const stateOf = (hass, id) => (id ? hass.states[id]?.state : undefined);
@@ -149,9 +138,8 @@ function formatFinish(hass, id) {
   return `${when.toLocaleDateString(lang, { weekday: "short", timeZone: tz })} ${time}`;
 }
 
-/** What the printer is doing: the print state, "off" while its plug is off, "offline" when Moonraker is not connected. */
+/** What the printer is doing: the print state, or "offline" while the integration reports it unavailable. */
 function printState(hass, entityId) {
-  if (stateOf(hass, related(hass, entityId).power) === "off") return "off";
   const s = stateOf(hass, entityId);
   return !s || DEAD.has(s) ? "offline" : s;
 }
@@ -190,7 +178,7 @@ const CSS = `
   .mr-box[hidden] { display: none; }
 `;
 
-const DOT = { printing: "#22b8e6", paused: "#f0b429", complete: "#3ecf6e", cancelled: "#9aa5ab", error: "#e5222e", offline: "#4a5a63", off: "#4a5a63" };
+const DOT = { printing: "#22b8e6", paused: "#f0b429", complete: "#3ecf6e", cancelled: "#9aa5ab", error: "#e5222e", offline: "#4a5a63" };
 
 async function cameraCard(hass, cameraId, live) {
   try {
@@ -292,7 +280,7 @@ function printerWindow(hass, entityId, settings) {
     lastHass = h;
     const s = printState(h, entityId);
     const busy = BUSY.has(s);
-    const down = s === "off" || s === "offline";
+    const down = s === "offline";
     grid.style.display = down ? "none" : "";
     cam.hidden = down || !(settings.camera && r.camera);
     dot.style.background = DOT[s] ?? "#6b7f8a";
@@ -389,12 +377,12 @@ const printer = {
     } else if (s === "paused") text = `${textOf(hass, "paused")}${p === null ? "" : ` · ${Math.floor(p)}%`}`;
     else if (s === "error") text = textOf(hass, "error");
     else if (s === "complete") text = textOf(hass, "complete");
-    else if (s === "off") text = textOf(hass, "off");
+    else if (s === "offline") text = textOf(hass, "offline");
     return { icon: "mdi:printer-3d-nozzle", text, active: BUSY.has(s) };
   },
   watch: ({ hass, entityId }) => {
     const r = related(hass, entityId);
-    return [r.progress, r.left, r.printerState, r.power].filter(Boolean);
+    return [r.progress, r.left, r.printerState].filter(Boolean);
   },
   tap: ({ hass, entityId, settings, showWindow }) => {
     if (openPrinter === entityId && openWindow?.isConnected) {
@@ -412,7 +400,7 @@ const printer = {
 const plugin = {
   id: "moonraker",
   name: "Moonraker",
-  version: "1.1.0",
+  version: "1.2.0",
   apiVersion: 1,
   devices: [printer],
 };
