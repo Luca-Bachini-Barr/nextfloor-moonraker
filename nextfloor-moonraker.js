@@ -27,7 +27,6 @@ const TEXT = {
     nozzle: "Nozzle",
     bed: "Bed",
     chamber: "Chamber",
-    box: "Box",
     pause: "Pause",
     resume: "Resume",
     cancel: "Cancel",
@@ -88,7 +87,6 @@ function related(hass, entityId) {
     bedTarget: find("number", "bed_target"),
     chamber: find("sensor", "chamber_temperature"),
     chamberTarget: find("number", "chamber_target"),
-    boxChange: find("sensor", "box_filament_change"),
     pause: find("button", "pause_print"),
     resume: find("button", "resume_print"),
     cancel: find("button", "cancel_print"),
@@ -174,8 +172,6 @@ const CSS = `
   .mr-btns[hidden], .mr-btns button[hidden] { display: none; }
   .mr-btns button { flex: 1; border: 1px solid rgba(127,208,255,.35); background: rgba(127,208,255,.08); color: inherit; border-radius: 8px; padding: 6px; font: inherit; cursor: pointer; }
   .mr-btns button.danger { border-color: rgba(229,34,46,.6); background: rgba(229,34,46,.15); }
-  .mr-box { padding: 0 12px 6px; font-size: 12px; opacity: .85; }
-  .mr-box[hidden] { display: none; }
 `;
 
 const DOT = { printing: "#22b8e6", paused: "#f0b429", complete: "#3ecf6e", cancelled: "#9aa5ab", error: "#e5222e", offline: "#4a5a63" };
@@ -240,9 +236,6 @@ function printerWindow(hass, entityId, settings) {
   const bed = cell(textOf(hass, "bed"));
   const chamber = r.chamber ? cell(textOf(hass, "chamber")) : null;
 
-  const box = el("div", "mr-box", root);
-  box.hidden = true;
-
   const cam = el("div", "mr-cam", root);
   cam.hidden = true;
   let camEl = null;
@@ -306,10 +299,6 @@ function printerWindow(hass, entityId, settings) {
     nozzle.textContent = temp(r.nozzle, r.nozzleTarget);
     bed.textContent = temp(r.bed, r.bedTarget);
     if (chamber) chamber.textContent = temp(r.chamber, r.chamberTarget);
-
-    const change = stateOf(h, r.boxChange);
-    box.hidden = !change || DEAD.has(change) || change === "idle";
-    if (!box.hidden) box.textContent = `${textOf(h, "box")}: ${change}`;
 
     // the slicer's picture of the file; the camera answers with an error while no file is loaded
     if (settings.thumbnail && r.thumbnail) {
@@ -400,7 +389,7 @@ const printer = {
 const plugin = {
   id: "moonraker",
   name: "Moonraker",
-  version: "1.2.1",
+  version: "1.2.2",
   apiVersion: 1,
   devices: [printer],
 };
