@@ -282,7 +282,7 @@ function printerWindow(hass, entityId, settings) {
     const busy = BUSY.has(s);
     const down = s === "offline";
     grid.style.display = down ? "none" : "";
-    cam.hidden = down || !(settings.camera && r.camera);
+    cam.hidden = down || !(settings.camera && r.camera) || DEAD.has(stateOf(h, r.camera) ?? "unavailable");
     dot.style.background = DOT[s] ?? "#6b7f8a";
     stateText.textContent = textOf(h, s) ?? s;
 
@@ -400,7 +400,7 @@ const printer = {
 const plugin = {
   id: "moonraker",
   name: "Moonraker",
-  version: "1.2.0",
+  version: "1.2.1",
   apiVersion: 1,
   devices: [printer],
 };
