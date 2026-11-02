@@ -19,6 +19,10 @@ The plugin handles `sensor.<printer>_current_print_state` and finds the printer'
 
 While the integration reports the printer unavailable (switched off or not connected), the marker and the window say **Off / not connected** and the window hides everything else. The integration notices a printer that was switched off after its next poll, so this can take up to about a minute.
 
+### Faster updates
+
+The window and marker update as often as the Moonraker integration polls the printer (every 30 seconds by default). For quicker updates, and a quicker **Off / not connected**, lower it: Settings → Devices & services → Moonraker → **Configure** → **Integration polling rate (s)**. 10 seconds works well; below about 5 seconds gains little and queries the printer more often. Going offline then takes about two polls (around 20 seconds at 10).
+
 ## Install
 
 1. HACS → ⋮ → Custom repositories → add this repository as **Dashboard**, then download it.
